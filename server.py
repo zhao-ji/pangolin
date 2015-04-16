@@ -62,7 +62,6 @@ class ICMPRequestHandler(SocketServer.BaseRequestHandler):
                     logbook.info("empty buf")
                     break
                 else:
-                    logbook.info("buf:\n{}".format(buf))
                     remote_recv += buf
             if len(remote_recv) <= 4096:
                 icmp_body = remote_recv
@@ -94,7 +93,7 @@ class ICMPRequestHandler(SocketServer.BaseRequestHandler):
 
 
 if __name__ == '__main__':
-    local_log = logbook.StderrHandler()
+    local_log = logbook.FileHandler("/home/nightwish/pangolin/ping.log")
     local_log.format_string = (
         u'[{record.time:%H:%M:%S}] '
         u'lineno:{record.lineno} '
