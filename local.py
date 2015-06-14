@@ -57,7 +57,7 @@ class Socks5Server(SocketServer.StreamRequestHandler):
         goal_addr = (addr, port)
         init_packet = icmp.pack(identifier, 6666, repr(goal_addr))
         remote.sendto(init_packet, REMOTE_ADDR)
-        _ = icmp.unpack(remote.recv(4096))
+        _ = icmp.unpack(remote.recvfrom(4096)[0])
         logbook.info("first handshake reply: {}".format(_))
 
         # 5. Communicate
@@ -72,7 +72,7 @@ class Socks5Server(SocketServer.StreamRequestHandler):
             packet = icmp.pack(identifier, 8888, local_data)
             remote.sendto(packet, REMOTE_ADDR)
 
-            recv = icmp.unpack(remote.recv(8192))
+            recv = icmp.unpack(remote.recvfrom(8192)[0])
             logbook.info("once recv:\n{}".format(recv))
             if not recv:
                 logbook.info("remote breaking down")
@@ -81,13 +81,13 @@ class Socks5Server(SocketServer.StreamRequestHandler):
                 while True:
                     packet = icmp.pack(identifier, 9999, local_data)
                     remote.sendto(packet, REMOTE_ADDR)
-                    content = icmp.unpack(remote.recv(8192))
+                    content = icmp.unpack(remote.recvfrom(8192)[0])
                     if content == "over":
                         break
                     else:
                         local.send(content)
             else:
-                logbook.info("once recv:\n{}".format(repr(recv)))
+                logbook.info("once return:\n{}".format(repr(recv)))
                 local.send(recv)
 
 
