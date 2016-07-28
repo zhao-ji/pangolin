@@ -22,7 +22,7 @@ class IPPacket():
         total = (total>>16) + (total & 0xffff)
         total += total>>16
         return ctypes.c_ushort(~total).value
-    
+
     def parse(self, buf, debug = True):
         self.ttl, self.proto, self.chksum = struct.unpack("!BBH", buf[8:12])
         self.src, self.dst = buf[12:16], buf[16:20]
@@ -37,7 +37,7 @@ class ICMPPacket(IPPacket):
         if debug:
             print "parse ICMP type=", self.type, "code=", self.code, "id=", self.id, "seqno=", self.seqno
         return buf[28:]
-    
+
     def create(self, type_, code, id_, seqno, data):
         packfmt = "!BBHHH%ss" % (len(data))
         args = [type_, code, 0, id_, seqno, data]

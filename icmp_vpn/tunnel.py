@@ -1,30 +1,25 @@
 #!/usr/bin/env python
 
-import os, sys
+import os
+import sys
 import hashlib
 import getopt
 import fcntl
 import icmp
 import time
 import struct
-import socket, select
+import socket
+import select
 
-SHARED_PASSWORD = hashlib.md5("password").digest()
-TUNSETIFF = 0x400454ca
-IFF_TUN   = 0x0001
-
-MODE = 0
-DEBUG = 0
-PORT = 0
-IFACE_IP = "10.0.0.1"
-MTU = 1500
-CODE = 86
-TIMEOUT = 60*10 # seconds
 
 class Tunnel():
     def create(self):
         self.tfd = os.open("/dev/net/tun", os.O_RDWR)
-        ifs = fcntl.ioctl(self.tfd, TUNSETIFF, struct.pack("16sH", "t%d", IFF_TUN))
+        ifs = fcntl.ioctl(
+            self.tfd,
+            TUNSETIFF,
+            struct.pack("16sH", "t%d", IFF_TUN),
+        )
         self.tname = ifs[:16].strip("\x00")
 
     def close(self):
@@ -36,7 +31,11 @@ class Tunnel():
         os.system("ip addr add %s dev %s" % (ip, self.tname))
 
     def run(self):
-        self.icmpfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("icmp"))
+        self.icmpfd = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_RAW,
+            socket.getprotobyname("icmp"),
+        )
 
         self.clients = {}
         packet = icmp.ICMPPacket()
@@ -46,63 +45,107 @@ class Tunnel():
             rset = select.select([self.icmpfd, self.tfd], [], [])[0]
             for r in rset:
                 if r == self.tfd:
-                    if DEBUG: os.write(1, ">")
+                    if DEBUG:
+                        os.write(1, ">")
                     data = os.read(self.tfd, MTU)
-                    if MODE == 1: # Server
+                    if MODE == 1:  # Server
                         for key in self.clients:
-                            buf = packet.create(0, CODE+1, self.clients[key]["id"], self.clients[key]["seqno"], data)
+                            buf = packet.create(
+                                0,
+                                CODE+1,
+                                self.clients[key]["id"],
+                                self.clients[key]["seqno"],
+                                data,
+                            )
                             self.clients[key]["seqno"] += 1
-                            self.icmpfd.sendto(buf, (self.clients[key]["ip"], 22))
+                            self.icmpfd.sendto(
+                                buf,
+                                (self.clients[key]["ip"], 22),
+                            )
                         # Remove timeout clients
                         curTime = time.time()
                         for key in self.clients.keys():
-                            if curTime - self.clients[key]["aliveTime"] > TIMEOUT:
-                                print "Remove timeout client", self.clients[key]["ip"]
+                            if curTime - self.clients[key]["aliveTime"] \
+                                    > TIMEOUT:
+                                print "Remove timeout client", \
+                                    self.clients[key]["ip"]
                                 del self.clients[key]
-                    else: # Client
-                        buf = packet.create(8, CODE, PORT, self.client_seqno, data)
+                    else:  # Client
+                        buf = packet.create(
+                            8, CODE, PORT, self.client_seqno, data)
                         self.client_seqno += 1
                         self.icmpfd.sendto(buf, (IP, 22))
                 elif r == self.icmpfd:
-                    if DEBUG: os.write(1, "<")
+                    if DEBUG:
+                        os.write(1, "<")
                     buf = self.icmpfd.recv(icmp.BUFFER_SIZE)
                     data = packet.parse(buf, DEBUG)
                     ip = socket.inet_ntoa(packet.src)
                     if packet.code in (CODE, CODE+1):
-                        if MODE == 1: # Server
+                        if MODE == 1:  # Server
                             key = struct.pack("4sH", packet.src, packet.id)
                             if key not in self.clients:
                                 # New client comes
                                 if data == SHARED_PASSWORD:
-                                    self.clients[key] = {"aliveTime": time.time(),
-                                                         "ip": ip,
-                                                         "id": packet.id,
-                                                         "seqno": packet.seqno}
-                                    print "New Client from %s:%d" % (ip, packet.id)
+                                    self.clients[key] = {
+                                        "aliveTime": time.time(),
+                                        "ip": ip,
+                                        "id": packet.id,
+                                        "seqno": packet.seqno,
+                                    }
+                                    print "New Client from %s:%d" \
+                                        % (ip, packet.id)
                                 else:
-                                    print "Wrong password from %s:%d" % (ip, packet.id)
-                                    buf = packet.create(0, CODE+1, packet.id, packet.seqno, "PASSWORD"*10)
+                                    print "Wrong password from %s:%d" \
+                                        % (ip, packet.id)
+                                    buf = packet.create(
+                                        0,
+                                        CODE+1,
+                                        packet.id,
+                                        packet.seqno,
+                                        "PASSWORD"*10,
+                                    )
                                     self.icmpfd.sendto(buf, (ip, 22))
                             else:
-                                # Simply write the packet to local or forward them to other clients ???
+                                # Simply write the packet to local
+                                # or forward them to other clients ???
                                 os.write(self.tfd, data)
                                 self.clients[key]["aliveTime"] = time.time()
-                        else: # Client
+                        else:  # Client
                             if data.startswith("PASSWORD"):
                                 # Do login
-                                buf = packet.create(8, CODE, packet.id, self.client_seqno, SHARED_PASSWORD)
+                                buf = packet.create(
+                                    8,
+                                    CODE,
+                                    packet.id,
+                                    self.client_seqno,
+                                    SHARED_PASSWORD,
+                                )
                                 self.client_seqno += 1
                                 self.icmpfd.sendto(buf, (ip, 22))
                             else:
                                 os.write(self.tfd, data)
 
-def usage(status = 0):
+SHARED_PASSWORD = hashlib.md5("password").digest()
+TUNSETIFF = 0x400454ca
+IFF_TUN = 0x0001
+
+MODE = 0
+DEBUG = 0
+PORT = 0
+IFACE_IP = "10.0.0.1"
+MTU = 1500
+CODE = 86
+TIMEOUT = 60*10  # seconds
+
+
+def usage(status=0):
     print "Usage: icmptun [-s code|-c serverip,code,id] [-hd] [-l localip]"
     sys.exit(status)
 
-if __name__=="__main__":
-    opts = getopt.getopt(sys.argv[1:],"s:c:l:hd")
-    for opt,optarg in opts[0]:
+if __name__ == "__main__":
+    opts = getopt.getopt(sys.argv[1:], "s:c:l:hd")
+    for opt, optarg in opts[0]:
         if opt == "-h":
             usage()
         elif opt == "-d":
@@ -112,7 +155,7 @@ if __name__=="__main__":
             CODE = int(optarg)
         elif opt == "-c":
             MODE = 2
-            IP,CODE,PORT = optarg.split(",")
+            IP, CODE, PORT = optarg.split(",")
             CODE = int(CODE)
             PORT = int(PORT)
         elif opt == "-l":
